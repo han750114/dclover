@@ -1,0 +1,11 @@
+discord
+openai
+python-dotenv
+# 用於資料庫
+sqlite3 # (通常內建，但列出以供參考)
+# 語音與排程
+discord.ext.tasks
+# 如果使用進階 TTS，例如 ElevenLabs:
+elevenlabs
+# 如果使用情感分析:
+transformers
