@@ -1,4 +1,4 @@
-discord
+discord.py
 openai
 python-dotenv
 # 用於資料庫
@@ -9,3 +9,8 @@ discord.ext.tasks
 elevenlabs
 # 如果使用情感分析:
 transformers
+python-dotenv
+requests
+elevenlabs
+transformers
+torch
