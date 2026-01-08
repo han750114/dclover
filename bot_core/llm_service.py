@@ -49,7 +49,7 @@ def generate_response(user_id: int, user_prompt: str, history: list) -> str:
 {SYSTEM_PROMPT}
 
 --- 關於對方的重要記憶 ---
-{long_term_memory if long_term_memory else "（目前沒有記憶）"}
+{long_term_memory if long_term_memory else "（目前對於您沒有記憶）"}
 """
 
     messages = [
