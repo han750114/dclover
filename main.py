@@ -15,7 +15,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="%", intents=intents)
 
 def extract_memory(message: str):
-    keywords = ["生日", "我喜歡", "我討厭", "我最愛", "我是", "我住"]
+    keywords = ["生日", "我喜歡", "我討厭", "我最愛", "我是", "我住","語言","興趣","工作","職業","夢想","目標"]
     if any(k in message for k in keywords):
         return f"使用者的重要資訊：{message}"
     return None
