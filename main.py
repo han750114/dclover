@@ -53,24 +53,29 @@ async def on_ready():
     app_commands.Choice(name="活潑女僕", value="maid"),
     app_commands.Choice(name="專業秘書", value="secretary"),
 ])
-@bot.tree.command(name="gender", description="設定您的性別，讓伴侶對您的稱呼更準確")
-@app_commands.describe(性別="請選擇您的性別")
-@app_commands.choices(性別=[
-    app_commands.Choice(name="男性 (會稱呼您為男朋友、主人、老闆等)", value="男性"),
-    app_commands.Choice(name="女性 (會稱呼您為女朋友、大小姐、老闆等)", value="女性"),
-    app_commands.Choice(name="非二元/不詳", value="不詳"),
-])
-async def set_gender(interaction: discord.Interaction, 性別: app_commands.Choice[str]):
-    from bot_core.memory_manager import set_user_gender
-    set_user_gender(interaction.user.id, 性別.value)
-    await interaction.response.send_message(f"✅ 好的，我已經記住您的性別是 **{性別.name}** 了！", ephemeral=True)
 async def role(interaction: discord.Interaction, 人格: app_commands.Choice[str]):
     set_user_role(interaction.user.id, 人格.value)
     await interaction.response.send_message(
         f"✅ 已成功切換為 **{人格.name}**！之後的對話我將以此身份回覆您。",
         ephemeral=True # 只有使用者看得到確認訊息
     )
-
+# ======================
+# 🚻 性別設定指令
+# ======================
+@bot.tree.command(name="gender", description="設定您的性別，讓稱呼更準確")
+@app_commands.describe(性別="請選擇您的性別")
+@app_commands.choices(性別=[
+    app_commands.Choice(name="男性", value="男性"),
+    app_commands.Choice(name="女性", value="女性"),
+])
+async def gender(interaction: discord.Interaction, 性別: app_commands.Choice[str]):
+    from bot_core.memory_manager import set_user_gender
+    
+    set_user_gender(interaction.user.id, 性別.value)
+    await interaction.response.send_message(
+        f"✅ 好的，我已經記住您是 **{性別.name}** 了，之後會調整對您的稱呼。",
+        ephemeral=True
+    )
 # ======================
 # 訊息處理
 # ======================

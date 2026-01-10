@@ -3,7 +3,7 @@ import requests
 from typing import Optional, Dict
 
 # 從 memory_manager 匯入必要的函式
-from .memory_manager import get_memories, get_user_role 
+from .memory_manager import get_memories, get_user_role, get_user_gender
 
 # ======================
 # Ollama 設定
@@ -93,22 +93,23 @@ def should_store_memory(user_text: str) -> Optional[Dict]:
 # 主要聊天回覆 (已加入角色系統)
 # ======================
 def generate_response(user_id: int, user_prompt: str, history: list) -> str:
+    # 1. 取得資料
+    long_term_memory = get_memories(user_id)
     role_key = get_user_role(user_id)
-    bot_name = get_bot_name(user_id)
-    user_gender = get_user_gender(user_id) # 取得使用者性別
+    user_gender = get_user_gender(user_id)
     
-    # ... (獲取角色描述 role_description)
+    role_description = ROLES_CONFIG.get(role_key, ROLES_CONFIG["lover"])
 
+    # 2. 組成 System Prompt (暫時不使用 get_bot_name)
     system_content = f"""
 {LANGUAGE_RULES}
 
 角色設定：
-妳的名字是「{bot_name}」。
 {role_description}
-使用者的性別是：「{user_gender}」。請根據此性別使用合適的稱呼與語氣。
+使用者的性別是：「{user_gender}」。請根據此性別使用合適的稱呼。
 
 --- 關於對方的重要記憶 ---
-{long_term_memory if long_term_memory else "（目前對於您沒有重要記憶）"}
+{long_term_memory if long_term_memory else "（目前沒有重要記憶）"}
 """
 
     messages = [

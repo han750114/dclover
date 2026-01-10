@@ -34,6 +34,19 @@ def init_db():
             user_gender TEXT DEFAULT '未設定'
         )
         """)
+        try:
+            conn.execute("ALTER TABLE user_settings ADD COLUMN user_gender TEXT DEFAULT '未設定'")
+            print("✅ 已成功補上 user_gender 欄位")
+        except sqlite3.OperationalError:
+            # 如果欄位已經存在，會報這個錯，直接跳過即可
+            pass
+
+        # 補上 bot_name (如果你之前沒補的話)
+        try:
+            conn.execute("ALTER TABLE user_settings ADD COLUMN bot_name TEXT DEFAULT '妳的伴侶'")
+            print("✅ 已成功補上 bot_name 欄位")
+        except sqlite3.OperationalError:
+            pass
 
 # 新增：獲取使用者性別
 def get_user_gender(user_id: int) -> str:
