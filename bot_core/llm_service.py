@@ -93,19 +93,19 @@ def should_store_memory(user_text: str) -> Optional[Dict]:
 # 主要聊天回覆 (已加入角色系統)
 # ======================
 def generate_response(user_id: int, user_prompt: str, history: list) -> str:
-    # 1️⃣ 取出長期記憶
-    long_term_memory = get_memories(user_id)
-
-    # 2️⃣ 獲取使用者當前選擇的角色
     role_key = get_user_role(user_id)
-    role_description = ROLES_CONFIG.get(role_key, ROLES_CONFIG["lover"])
+    bot_name = get_bot_name(user_id)
+    user_gender = get_user_gender(user_id) # 取得使用者性別
+    
+    # ... (獲取角色描述 role_description)
 
-    # 3️⃣ 組動態 system prompt
     system_content = f"""
 {LANGUAGE_RULES}
 
 角色設定：
+妳的名字是「{bot_name}」。
 {role_description}
+使用者的性別是：「{user_gender}」。請根據此性別使用合適的稱呼與語氣。
 
 --- 關於對方的重要記憶 ---
 {long_term_memory if long_term_memory else "（目前對於您沒有重要記憶）"}

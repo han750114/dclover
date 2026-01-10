@@ -25,6 +25,31 @@ def init_db():
             current_role TEXT DEFAULT 'lover'
         )
         """)
+        # 擴充使用者設定表格：加入機器人名稱與使用者性別
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INTEGER PRIMARY KEY,
+            current_role TEXT DEFAULT 'lover',
+            bot_name TEXT DEFAULT '妳的伴侶',
+            user_gender TEXT DEFAULT '未設定'
+        )
+        """)
+
+# 新增：獲取使用者性別
+def get_user_gender(user_id: int) -> str:
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute("SELECT user_gender FROM user_settings WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+        return row[0] if row else '未設定'
+
+# 新增：設定使用者性別
+def set_user_gender(user_id: int, gender: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+        INSERT INTO user_settings (user_id, user_gender)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET user_gender = ?
+        """, (user_id, gender, gender))
 
 def get_user_role(user_id: int) -> str:
     with sqlite3.connect(DB_PATH) as conn:
