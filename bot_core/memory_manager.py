@@ -80,7 +80,7 @@ def save_memory(user_id: int, category: str, content: str):
             datetime.now().isoformat()
         ))
 
-        print(f"🧠 記憶已儲存 | {category} | {content}")
+        print(f"🧠 記憶已儲存 | user_id={user_id} | {category} | {content}")
 
 # ======================
 # 取出記憶（給 LLM 用）
