@@ -64,38 +64,42 @@ async def on_message(message):
     # ==================================================
     # ⏰ 通用延遲提醒（最高優先，不進 LLM）
     # ==================================================
-    match = re.search(r"(\d+)\s*(秒|分鐘)", user_text)
+    matches = re.findall(
+        r"(\d+)\s*(秒|分鐘)\s*後?\s*提醒(?:我)?([^，。\n]+)",
+        user_text
+    )
 
-    if match and "提醒" in user_text:
-        amount = int(match.group(1))
-        unit = match.group(2)
-        delay = amount if unit == "秒" else amount * 60
+    if matches:
+        confirmations = []
 
-        # 抽出提醒內容
-        reminder_text = user_text
-        reminder_text = re.sub(r"\d+\s*(秒|分鐘)", "", reminder_text)
-        reminder_text = reminder_text.replace("後", "")
-        reminder_text = reminder_text.replace("提醒我", "")
-        reminder_text = reminder_text.replace("提醒", "")
-        reminder_text = reminder_text.strip()
+        for amount, unit, reminder_text in matches:
+            amount = int(amount)
+            delay = amount if unit == "秒" else amount * 60
+            reminder_text = reminder_text.strip()
 
-        if not reminder_text:
-            reminder_text = "該注意時間囉"
+            if not reminder_text:
+                reminder_text = "該注意時間囉"
 
-        # ✅ 立刻確認（避免「沒理我」的感覺）
-        await message.channel.send(
-            f"好，我收到囉，我會在 {amount}{unit} 後提醒你：{reminder_text} ⏰"
+            confirmations.append(f"{amount}{unit}後：{reminder_text}")
+
+            async def reminder_task(d=delay, text=reminder_text):
+                await asyncio.sleep(d)
+                await message.channel.send(
+                    f"提醒你一下：{text} ⏰"
+                )
+                reminder_tasks.discard(asyncio.current_task())
+
+            task = asyncio.create_task(reminder_task())
+            reminder_tasks.add(task)
+
+        # ✅ 一次性確認所有提醒
+        confirmation_text = "\n".join(
+            f"{i+1}️⃣ {c}" for i, c in enumerate(confirmations)
         )
 
-        async def reminder_task():
-            await asyncio.sleep(delay)
-            await message.channel.send(
-                f"提醒你一下：{reminder_text} ⏰"
-            )
-            reminder_tasks.discard(asyncio.current_task())
-
-        task = asyncio.create_task(reminder_task())
-        reminder_tasks.add(task)
+        await message.channel.send(
+            f"好，我幫你設定了 {len(confirmations)} 個提醒：\n{confirmation_text}"
+        )
         return
 
     # ==================================================
