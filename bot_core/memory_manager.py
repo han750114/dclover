@@ -1,17 +1,23 @@
-# bot_core/memory_manager.py
-
 import sqlite3
 import os
+from datetime import datetime
 
 DB_PATH = "data/memories.db"
 
+# ======================
+# 初始化資料庫
+# ======================
 def init_db():
     os.makedirs("data", exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
-        CREATE TABLE IF NOT EXISTS user_memories (
-            user_id INTEGER PRIMARY KEY,
-            memory TEXT
+        CREATE TABLE IF NOT EXISTS memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            content TEXT NOT NULL,
+            importance INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL
         )
         """)
         # 新增：儲存使用者目前選擇角色的表格
@@ -37,25 +43,40 @@ def set_user_role(user_id: int, role_name: str):
         ON CONFLICT(user_id) DO UPDATE SET current_role = ?
         """, (user_id, role_name, role_name))
 
-def get_memories(user_id: int) -> str:
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute(
-            "SELECT memory FROM user_memories WHERE user_id = ?",
-            (user_id,)
-        )
-        row = cur.fetchone()
-        return row[0] if row else ""
-
-def save_memory(user_id: int, new_memory: str):
+# ======================
+# 儲存長期記憶（分類版）
+# ======================
+def save_memory(user_id: int, category: str, content: str):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
-        INSERT INTO user_memories (user_id, memory)
-        VALUES (?, ?)
-        ON CONFLICT(user_id)
-        DO UPDATE SET memory = memory || '\n' || ?
-        """, (user_id, new_memory, new_memory))
-def extract_memory(message: str) -> str | None:
-    keywords = ["生日", "我喜歡", "我討厭", "我最愛", "我是", "我住"]
-    if any(k in message for k in keywords):
-        return f"使用者提到：{message}"
-    return None
+        INSERT INTO memories (user_id, category, content, created_at)
+        VALUES (?, ?, ?, ?)
+        """, (
+            user_id,
+            category,
+            content,
+            datetime.now().isoformat()
+        ))
+
+        print(f"🧠 記憶已儲存 | {category} | {content}")
+
+# ======================
+# 取出記憶（給 LLM 用）
+# ======================
+def get_memories(user_id: int, limit: int = 5) -> str:
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute("""
+        SELECT category, content
+        FROM memories
+        WHERE user_id = ?
+        ORDER BY importance DESC, created_at DESC
+        LIMIT ?
+        """, (user_id, limit)).fetchall()
+
+    if not rows:
+        return ""
+
+    return "\n".join([
+        f"- ({category}) {content}"
+        for category, content in rows
+    ])
