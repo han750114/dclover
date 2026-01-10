@@ -4,12 +4,10 @@ from datetime import datetime
 
 DB_PATH = "data/memories.db"
 
-# ======================
-# 初始化資料庫
-# ======================
 def init_db():
     os.makedirs("data", exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
+        # 記憶表格
         conn.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,21 +18,20 @@ def init_db():
             created_at TEXT NOT NULL
         )
         """)
-        # 新增：儲存使用者目前選擇角色的表格
+        # 使用者設定表格：儲存目前角色
         conn.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY,
             current_role TEXT DEFAULT 'lover'
         )
         """)
-# 新增：獲取使用者目前角色
+
 def get_user_role(user_id: int) -> str:
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.execute("SELECT current_role FROM user_settings WHERE user_id = ?", (user_id,))
         row = cur.fetchone()
         return row[0] if row else 'lover'
 
-# 新增：儲存使用者選擇的角色
 def set_user_role(user_id: int, role_name: str):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
