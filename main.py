@@ -148,7 +148,10 @@ async def on_message(message):
         history=[]
     )
 
-    await message.channel.send(reply)
+    await message.channel.send(
+        f"{message.author.mention} {reply}"
+    )
+
 
 # ======================
 # 啟動 Bot
