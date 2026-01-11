@@ -1,12 +1,23 @@
 import sqlite3
 import os
 from datetime import datetime, timedelta, date
+import chromadb
+from chromadb.utils import embedding_functions
 
 DB_PATH = "data/memories.db"
+CHROMA_PATH = "data/vector_db"
 
-# ======================
-# 初始化資料庫
-# ======================
+# --- 初始化 ChromaDB (使用 Ollama) ---
+ollama_ef = embedding_functions.OllamaEmbeddingFunction(
+    url="http://localhost:11434/api/embeddings",
+    model_name="bge-m3"
+)
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+collection = chroma_client.get_or_create_collection(
+    name="user_memories", 
+    embedding_function=ollama_ef
+)
+
 def init_db():
     os.makedirs("data", exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
@@ -130,11 +141,38 @@ def set_user_timezone(user_id: int, timezone: str):
 # 長期記憶
 # ======================
 def save_memory(user_id: int, category: str, content: str):
+    timestamp = datetime.utcnow().isoformat()
+    
+    # 1. 存入 SQLite (供系統查詢)
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
+        cursor = conn.execute("""
         INSERT INTO memories (user_id, category, content, created_at)
         VALUES (?, ?, ?, ?)
-        """, (user_id, category, content, datetime.utcnow().isoformat()))
+        """, (user_id, category, content, timestamp))
+        memory_id = str(cursor.lastrowid)
+
+    # 2. 存入 ChromaDB (供語義搜尋)
+    collection.add(
+        documents=[content],
+        ids=[f"mem_{memory_id}"],
+        metadatas=[{"user_id": user_id, "category": category}]
+    )
+
+# --- 新增：語義搜尋函數 ---
+def search_semantic_memories(user_id: int, query_text: str, limit: int = 3):
+    """搜尋與當前話題最相關的 3 條記憶"""
+    try:
+        results = collection.query(
+            query_texts=[query_text],
+            n_results=limit,
+            where={"user_id": user_id}
+        )
+        if not results['documents'] or not results['documents'][0]:
+            return ""
+        return "\n".join([f"- {doc}" for doc in results['documents'][0]])
+    except Exception as e:
+        print(f"⚠️ 語義搜尋失敗: {e}")
+        return ""
 
 def get_memories(user_id: int, limit: int = 5) -> str:
     with sqlite3.connect(DB_PATH) as conn:
@@ -236,8 +274,61 @@ def get_all_anniversaries():
         SELECT user_id, type, month, day, label
         FROM anniversaries
         """).fetchall()
+def get_all_anniversaries_with_tz():
+    """
+    使用 JOIN 同時抓取紀念日與使用者的時區設定
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        # 使用 LEFT JOIN 確保即便沒設定時區也能抓到資料，並給予預設值
+        query = """
+        SELECT a.user_id, a.type, a.month, a.day, a.label, 
+               COALESCE(s.timezone, 'Asia/Taipei') as tz
+        FROM anniversaries a
+        LEFT JOIN user_settings s ON a.user_id = s.user_id
+        """
+        return conn.execute(query).fetchall()
 def get_all_users():
     with sqlite3.connect(DB_PATH) as conn:
         return conn.execute("""
         SELECT user_id, timezone FROM user_settings
         """).fetchall()
+def get_all_facts(user_id: int, query_text: str = None):
+    """
+    整合 SQLite 事實與 ChromaDB 語義記憶
+    """
+    facts = []
+    
+    with sqlite3.connect(DB_PATH) as conn:
+        # 1. 抓取紀念日/生日
+        annivs = conn.execute(
+            "SELECT label, month, day FROM anniversaries WHERE user_id = ?",
+            (user_id,)
+        ).fetchall()
+        for a in annivs:
+            facts.append(f"重要日子 - {a[0]}：{a[1]}月{a[2]}日")
+        
+        # 2. 抓取性別與時區
+        settings = conn.execute(
+            "SELECT user_gender, timezone FROM user_settings WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        if settings:
+            facts.append(f"對方性別：{settings[0]}")
+            facts.append(f"對方時區：{settings[1]}")
+
+    # 3. 抓取相關的感性回憶 (ChromaDB)
+    semantic_mems = ""
+    if query_text:
+        try:
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=3,
+                where={"user_id": user_id}
+            )
+            if results['documents'] and results['documents'][0]:
+                semantic_mems = "\n".join([f"往事片段：{d}" for d in results['documents'][0]])
+        except Exception as e:
+            print(f"ChromaDB 查詢失敗: {e}")
+
+    fact_str = "\n".join(facts)
+    return f"【已知事實】\n{fact_str}\n\n【相關回憶】\n{semantic_mems}"

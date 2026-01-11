@@ -1,59 +1,66 @@
-#  Lover-Bot-Discord
+# Lover-Bot-Discord (Dclover)
 
 ## 專案簡介
+`Lover-Bot-Discord` 是一個專為沉浸式互動設計的 Discord 機器人。不同於一般的助理 AI，它結合了 **大型語言模型 (LLM)** 與 **混合式記憶架構**，旨在提供具有小說敘事感的對話體驗。它不只能精準記得你的生日與行程，還能透過「語義聯想」想起你們之間的點滴回憶。
 
-Lover-Bot-Discord 是一個先進的 Discord 機器人專案，結合了大型語言模型（LLM）的強大能力、持久的記憶管理和主動關懷機制。我們的目標是打造一個能夠在 Discord 上與使用者進行**連續、有溫度、且個性化**的語音及文字互動的虛擬戀人。
+## 核心特色
 
-這個專案是一個高階的 LLM 應用範例，結合了 RAG（檢索增強生成）概念中的記憶提取和複雜的異步排程任務。
-
-## 核心功能
-
-| 類別 | 功能名稱 | 狀態 | 說明 |
-| :--- | :--- | :--- | :--- |
-| **記憶與人格** | **一致的角色設定** |  實施中 | Bot 具有名為「小愛」的固定溫柔戀人人格和說話風格。 |
-| | **長期記憶管理** |  實施中 | 使用 SQLite 資料庫儲存使用者的喜好、特別日子等關鍵資訊，並在對話中體現。 |
-| **主動關懷** | **排程通知** |  規劃中 | 定時（如早上/晚上）主動透過私訊發送客製化的問候和關心。 |
-| | **環境感知** |  待開發 | 檢查使用者 Discord 狀態（如：正在玩遊戲、請勿打擾），以智慧調整訊息。 |
-| **語音互動** | **Speech-to-Speech (S2S)** |  待開發 | 支援語音頻道通話，透過 STT 接收語音並透過 TTS 播放語音回覆。 |
-| **互動介面** | **Slash Commands** |  規劃中 | 轉換為 Discord 斜線指令（`/ask`, `/remember`），提升用戶體驗。 |
+| 功能類別 | 說明 | 狀態 |
+| :--- | :--- | :--- |
+| **小說敘事風格** | 自動在對話中穿插動作與心理描寫（如 `*輕聲細語*`），大幅提升沉浸感。 | 已實施 |
+| **混合式記憶系統** | **SQLite** 負責事實儲存（行程、性別）；**ChromaDB** 負責感性回憶（語義 RAG）。 | 已實施 |
+| **隱私與本地化** | 核心運算完全在本地 **Ollama** 執行，確保對話私密且不需依賴外部 API 額外付費。 | 已實施 |
+| **智慧生活提醒** | 根據設定時區，由 AI 角色以自然且個性化的口吻提醒今日與本週行程。 | 已實施 |
 
 ---
 
-## 快速設定指南 (Setup Guide)
+## 技術架構
+* **語言模型**: [Ollama](https://ollama.com/) (預設模型：`llama3.1`)
+* **向量模型**: `bge-m3` (用於繁體中文語義記憶檢索)
+* **資料庫**: 
+    * **SQLite**: 負責結構化資料（提醒事項、使用者設定、紀念日）。
+    * **ChromaDB**: 負責非結構化向量資料（長期語義回憶）。
+* **開發框架**: `Discord.py`
 
-要運行此專案，您需要 Python 3.8+ 環境、Git，以及必要的 API 金鑰。
+---
 
-### 1. 克隆專案
+## 快速開始
 
-使用 Git 將專案克隆到您的本地電腦：
-
+### 1. 安裝環境依賴
+請確保您的 Python 版本為 3.8+，並安裝優化後的輕量化套件：
 ```bash
-git clone https://github.com/han750114/dclover.git
-cd dclover
+pip install discord.py python-dotenv requests chromadb tzdata
 ```
 
-2. 環境設定A. 建立虛擬環境與安裝依賴強烈建議使用虛擬環境來管理依賴：
-```bash
-# 建立虛擬環境
-
-python -m venv venv
-# 啟動虛擬環境 (macOS/Linux)
-source venv/bin/activate
-# 啟動虛擬環境 (Windows)
-.\venv\Scripts\activate
-
-# 安裝所有依賴套件
-pip install -r requirements.txt
-```
-B. 取得 API 金鑰您必須取得以下兩個憑證：憑證取得來源用途Discord Bot TokenDiscord Developer Portal啟動機器人並連線到 Discord。OpenAI API KeyOpenAI 平台呼叫 LLM 服務，用於生成對話和記憶處理。
-
-C. 設定 .env 檔案在專案根目錄中建立一個名為 .env 的檔案（此檔案已被 .gitignore 忽略，不會上傳），並填入您的金鑰：
+2. Ollama 模型準備
+請在您的電腦上安裝 Ollama 並執行以下指令，下載對話與向量模型：
 
 ```bash
-# .env 檔案內容
-DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN_HERE"
-OPENAI_API_KEY="YOUR_OPENAI_API_KEY_HERE"
+
+# 下載主要的聊天模型
+ollama pull llama3.1
+
+# 下載語義向量模型 (實現 RAG 記憶功能)
+ollama pull bge-m3
+
+```
+3. 設定環境變數
+在專案根目錄建立 .env 檔案並填入您的 Bot Token：
+
+```bash
+
+DISCORD_BOT_TOKEN="您的_DISCORD_機器人_TOKEN"
 ```
 
-3. 運行機器人在虛擬環境已啟動的情況下，執行主程式：Bashpython main.py
-如果成功，您將在終端機中看到 Bot 上線的提示訊息。
+## 互動指令
+本機器人支援 Slash Commands（斜線指令），讓操作更直覺：
+
+/role：切換 AI 伴侶的人格（如：溫柔戀人、活潑女僕、專業秘書）。
+
+/gender：設定您的性別，讓 AI 調整稱呼與對話語氣。
+
+/timezone：設定您的時區（如 Asia/Taipei），確保行程提醒準確無誤。
+
+/today：查看今日已排定的所有行程。
+
+/week：查看本週的重要行程安排。
