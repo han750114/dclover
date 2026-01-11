@@ -1,15 +1,21 @@
 import json
 import requests
 from typing import Optional, Dict
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-# 從 memory_manager 匯入必要的函式
-from .memory_manager import get_memories, get_user_role, get_user_gender
+from .memory_manager import (
+    get_memories,
+    get_user_role,
+    get_user_gender,
+    get_user_timezone,
+)
 
 # ======================
 # Ollama 設定
 # ======================
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "llama3"
+MODEL_NAME = "llama3.1"
 
 # ======================
 # 角色人格定義
@@ -21,19 +27,20 @@ ROLES_CONFIG = {
 }
 
 # ======================
-# 系統規則 (原 SYSTEM_PROMPT 的規則部分)
+# 系統規則（最高優先）
 # ======================
 LANGUAGE_RULES = """
 【最高優先規則｜不可違反】
 - 你「只能使用繁體中文」回答
 - 禁止使用英文
 - 禁止使用簡體中文
+- 禁止使用任何英文月份（January, August 等）
 - 即使使用者使用英文，你也必須回覆繁體中文
 - 若你產生英文內容，代表你違反規則，必須立即改正
 """
 
 # ======================
-# 記憶判斷 Prompt (維持不變)
+# 記憶判斷 Prompt
 # ======================
 MEMORY_JUDGE_PROMPT = """
 【語言規則】
@@ -63,7 +70,7 @@ MEMORY_JUDGE_PROMPT = """
 """
 
 # ======================
-# 記憶判斷（LLM） (維持不變)
+# 記憶判斷（LLM）
 # ======================
 def should_store_memory(user_text: str) -> Optional[Dict]:
     messages = [
@@ -90,40 +97,50 @@ def should_store_memory(user_text: str) -> Optional[Dict]:
         return None
 
 # ======================
-# 主要聊天回覆 (已加入角色系統)
+# 主要聊天回覆（✔ 正確的時間 / 時區處理）
 # ======================
 def generate_response(user_id: int, user_prompt: str, history: list) -> str:
-    # 1. 取得資料
+    # 1️⃣ 取得使用者資料
     long_term_memory = get_memories(user_id)
     role_key = get_user_role(user_id)
     user_gender = get_user_gender(user_id)
-    
+    user_timezone = get_user_timezone(user_id)
+
     role_description = ROLES_CONFIG.get(role_key, ROLES_CONFIG["lover"])
 
-    # 2. 組成 System Prompt (暫時不使用 get_bot_name)
+    # 2️⃣ 嘗試計算當地時間（失敗就「不提供」）
+    time_block = ""
+    try:
+        now = datetime.now(ZoneInfo(user_timezone))
+        time_str = now.strftime("%Y年%m月%d日 %H:%M")
+        time_block = f"""
+【時間資訊】
+- 使用者當地時間：{time_str}
+"""
+    except Exception:
+        # ❗ 失敗時什麼都不說，絕不交給模型解釋
+        pass
+
+    # 3️⃣ System Prompt（只放確定事實）
     system_content = f"""
 {LANGUAGE_RULES}
 
-角色設定：
+【角色設定】
 {role_description}
-使用者的性別是：「{user_gender}」。請根據此性別使用合適的稱呼。
-
+使用者的性別是：「{user_gender}」，請依此調整稱呼與語氣。
+{time_block}
 --- 關於對方的重要記憶 ---
 {long_term_memory if long_term_memory else "（目前沒有重要記憶）"}
 """
 
-    messages = [
-        {"role": "system", "content": system_content},
-    ]
+    messages = [{"role": "system", "content": system_content}]
 
-    # 4️⃣ 短期對話歷史
     for h in history:
         messages.append(h)
 
-    # 5️⃣ 使用者輸入
     messages.append({"role": "user", "content": user_prompt})
 
-    # 6️⃣ 呼叫 Ollama
+    # 4️⃣ 呼叫 Ollama
     try:
         response = requests.post(
             OLLAMA_URL,
@@ -132,31 +149,29 @@ def generate_response(user_id: int, user_prompt: str, history: list) -> str:
                 "messages": messages,
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,
+                    "temperature": 0.6,
                     "top_p": 0.9,
-                    "stop": ["August", "January", "February", "March"]
-                }
+                    "stop": [
+                        "January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"
+                    ],
+                },
             },
             timeout=60,
         )
-        
-        # 檢查 HTTP 狀態碼 (如果是 404 或 500 會在這裡報錯)
         response.raise_for_status()
-        
         result_json = response.json()
-        
-        # 檢查回傳的 JSON 裡是否有 message 欄位
+
         if "message" in result_json:
             return result_json["message"]["content"]
         else:
-            # 如果 Ollama 回傳了 error 欄位，把它印出來
             error_msg = result_json.get("error", "未知錯誤")
             print(f"❌ Ollama 報錯：{error_msg}")
-            return f"❤️ (我的大腦暫時當機了，錯誤訊息：{error_msg})"
+            return f"❤️（我剛剛有點恍神了，錯誤：{error_msg}）"
 
     except requests.exceptions.RequestException as e:
         print(f"⚠️ 連線 Ollama 失敗：{e}")
-        return "❤️ (對不起，我現在聯絡不上我的大腦 Ollama，請確認它是否有啟動。)"
+        return "❤️（我現在有點聯絡不上大腦，稍後再試好嗎？）"
     except Exception as e:
         print(f"⚠️ 發生預期外錯誤：{e}")
-        return "❤️ (我現在有點不舒服，晚點再聊好嗎？)"
+        return "❤️（我現在有點累，等等再陪你聊。）"

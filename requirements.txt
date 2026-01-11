@@ -14,3 +14,4 @@ requests
 elevenlabs
 transformers
 torch
+tzdata
