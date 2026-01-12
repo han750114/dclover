@@ -31,13 +31,10 @@ def render_schedule(reminders, role, user_timezone="Asia/Taipei", mode="all"):
     if not reminders:
         return "📭 目前沒有任何行程。"
 
-    # ======================
-    # 角色口吻
-    # ======================
     if role == "secretary":
         prefix = "📋 行程摘要如下："
     elif role == "maid":
-        prefix = "主人～這是您接下來的安排 💕"
+        prefix = "這是您接下來的安排 💕"
     else:
         prefix = "這是你目前的行程 ❤️"
 
@@ -73,7 +70,7 @@ def render_schedule_embed(reminders, role, user_timezone="Asia/Taipei", title="�
     if role == "secretary":
         embed.description = "以下是您目前的重要行程："
     elif role == "maid":
-        embed.description = "主人～這是您接下來的安排唷 💕"
+        embed.description = "這是您接下來的安排唷 💕"
     else:
         embed.description = "這是你接下來需要注意的事情 ❤️"
 

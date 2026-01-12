@@ -7,7 +7,6 @@ from chromadb.utils import embedding_functions
 DB_PATH = "data/memories.db"
 CHROMA_PATH = "data/vector_db"
 
-# --- 初始化 ChromaDB (使用 Ollama) ---
 ollama_ef = embedding_functions.OllamaEmbeddingFunction(
     url="http://localhost:11434/api/embeddings",
     model_name="bge-m3"
@@ -22,9 +21,6 @@ def init_db():
     os.makedirs("data", exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
 
-        # ======================
-        # 記憶表
-        # ======================
         conn.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,9 +32,6 @@ def init_db():
         )
         """)
 
-        # ======================
-        # 使用者設定表
-        # ======================
         conn.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY,
@@ -49,9 +42,7 @@ def init_db():
         )
         """)
 
-        # ======================
-        # 排程提醒表（UTC）
-        # ======================
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS reminders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,9 +53,6 @@ def init_db():
         )
         """)
 
-        # ======================
-        # 紀念日 / 生日表
-        # ======================
         conn.execute("""
         CREATE TABLE IF NOT EXISTS anniversaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,9 +65,6 @@ def init_db():
         )
         """)
 
-# ======================
-# 使用者角色
-# ======================
 def get_user_role(user_id: int) -> str:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
@@ -97,9 +82,6 @@ def set_user_role(user_id: int, role_name: str):
         ON CONFLICT(user_id) DO UPDATE SET current_role = excluded.current_role
         """, (user_id, role_name))
 
-# ======================
-# 使用者性別
-# ======================
 def get_user_gender(user_id: int) -> str:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
@@ -117,9 +99,6 @@ def set_user_gender(user_id: int, gender: str):
         ON CONFLICT(user_id) DO UPDATE SET user_gender = excluded.user_gender
         """, (user_id, gender))
 
-# ======================
-# 使用者時區
-# ======================
 def get_user_timezone(user_id: int) -> str:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
@@ -137,9 +116,6 @@ def set_user_timezone(user_id: int, timezone: str):
         ON CONFLICT(user_id) DO UPDATE SET timezone = excluded.timezone
         """, (user_id, timezone))
 
-# ======================
-# 長期記憶
-# ======================
 def save_memory(user_id: int, category: str, content: str):
     timestamp = datetime.utcnow().isoformat()
     
@@ -158,7 +134,6 @@ def save_memory(user_id: int, category: str, content: str):
         metadatas=[{"user_id": user_id, "category": category}]
     )
 
-# --- 新增：語義搜尋函數 ---
 def search_semantic_memories(user_id: int, query_text: str, limit: int = 3):
     """搜尋與當前話題最相關的 3 條記憶"""
     try:
@@ -189,9 +164,6 @@ def get_memories(user_id: int, limit: int = 5) -> str:
 
     return "\n".join(f"- ({c}) {t}" for c, t in rows)
 
-# ======================
-# 排程提醒（UTC）
-# ======================
 def save_reminder(user_id: int, remind_at: str, content: str):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -219,9 +191,6 @@ def pop_due_reminders(now_iso: str):
             conn.execute("DELETE FROM reminders WHERE id = ?", (r[0],))
         return rows
 
-# ======================
-# 今日 / 本週行程
-# ======================
 def get_today_reminders(user_id: int):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
@@ -250,9 +219,6 @@ def get_week_reminders(user_id: int):
         ORDER BY remind_at
         """, (user_id, start, end)).fetchall()
 
-# ======================
-# 🎂 紀念日 / 生日
-# ======================
 def save_anniversary(user_id, type_, month, day, label):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -279,7 +245,6 @@ def get_all_anniversaries_with_tz():
     使用 JOIN 同時抓取紀念日與使用者的時區設定
     """
     with sqlite3.connect(DB_PATH) as conn:
-        # 使用 LEFT JOIN 確保即便沒設定時區也能抓到資料，並給予預設值
         query = """
         SELECT a.user_id, a.type, a.month, a.day, a.label, 
                COALESCE(s.timezone, 'Asia/Taipei') as tz
@@ -295,14 +260,12 @@ def get_all_users():
 def get_all_facts(user_id: int, query_text: str = None):
     facts = []
     with sqlite3.connect(DB_PATH) as conn:
-        # 【新增】讓 LLM 看見目前的排程清單，防止它亂編日期
         reminders = conn.execute(
             "SELECT remind_at, content FROM reminders WHERE user_id = ? AND remind_at >= ? ORDER BY remind_at LIMIT 5",
             (user_id, datetime.utcnow().isoformat())
         ).fetchall()
         for r in reminders:
             facts.append(f"系統已排定行程：{r[0].replace('T', ' ')} - {r[1]}")
-        # 1. 抓取紀念日/生日
         annivs = conn.execute(
             "SELECT label, month, day FROM anniversaries WHERE user_id = ?",
             (user_id,)
@@ -310,18 +273,14 @@ def get_all_facts(user_id: int, query_text: str = None):
         for a in annivs:
             facts.append(f"重要日子 - {a[0]}：{a[1]}月{a[2]}日")
         
-        # 2. [新增] 抓取目前的排程提醒
-        # 只抓取未來的行程，最多 5 筆
         reminders = conn.execute(
             "SELECT remind_at, content FROM reminders WHERE user_id = ? AND remind_at >= ? ORDER BY remind_at LIMIT 5",
             (user_id, datetime.utcnow().isoformat())
         ).fetchall()
         for r in reminders:
-            # 格式化一下時間，讓 LLM 更好讀
             time_str = r[0].replace("T", " ")[:16]
             facts.append(f"已排定行程：{time_str} - {r[1]}")
 
-        # 3. 抓取性別與時區
         settings = conn.execute(
             "SELECT user_gender, timezone FROM user_settings WHERE user_id = ?",
             (user_id,)
@@ -330,7 +289,6 @@ def get_all_facts(user_id: int, query_text: str = None):
             facts.append(f"對方性別：{settings[0]}")
             facts.append(f"對方時區：{settings[1]}")
 
-    # 3. 抓取相關的感性回憶 (ChromaDB)
     semantic_mems = ""
     if query_text:
         try:
@@ -353,7 +311,7 @@ def delete_reminder_by_index(user_id: int, index: int) -> bool:
     index 從 1 開始
     """
     import sqlite3
-    from .memory_manager import DB_PATH  # 如果同檔案，可刪這行
+    from .memory_manager import DB_PATH 
 
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute("""

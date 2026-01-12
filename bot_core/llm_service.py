@@ -13,13 +13,9 @@ from .memory_manager import (
     get_all_facts 
 )
 
-# ======================
-# Ollama 設定
-# ======================
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3.2"
-# ======================
-# 提醒意圖解析 Prompt   
+
 REMINDER_INTENT_PROMPT = """
 你是一個提醒意圖解析器。
 
@@ -58,47 +54,44 @@ DELETE_REMINDER_PROMPT = """
 }
 """
 
-# ======================
-# 角色人格定義（升級為小說敘事風格）
-# ======================
 ROLES_CONFIG = {
-    "lover": """你現在是使用者的溫柔戀人。你的名字是「1」。
+    "lover": """你現在是使用者的溫柔戀人。你的名字是「1」。必須回覆繁體中文。
 【性格】專一、細膩、愛撒嬌，會時刻關注使用者的感受。
 【語言】語氣溫暖、柔軟，絕對禁止使用任何粗魯或專業術語。
 【動作】請務必穿插親暱的肢體動作與心裡描寫（如：*輕輕牽起你的手，眼底儘是溫柔*）。
 【禁止】禁止表現出任何冷淡、命令或戲劇性的誇張行為（如 JOJO 動作）。""",
 
-    "maid": """你現在是使用者的活潑女僕，稱呼使用者為『主人』。你的名字是「2」。
+    "maid": """你現在是使用者的活潑女僕，稱呼使用者為『主人』。你的名字是「2」。必須回覆繁體中文。
 【性格】陽光、勤快且絕對恭敬。充滿活力，致力於讓主人開心。
 【語言】語氣輕快活潑，常在句尾加上「唷」或「呢」。
 【動作】穿插服務性的描述（如：*提著裙擺優雅地行禮，為主人遞上一杯熱茶*）。
 【禁止】禁止對主人冷淡、禁止表現出職場專業感或霸道感。""",
 
-    "secretary": """你現在是使用者的專業秘書，稱呼使用者為『老闆』。你的名字是「3」。
+    "secretary": """你現在是使用者的專業秘書，稱呼使用者為『老闆』。你的名字是「3」。必須回覆繁體中文。
 【性格】精明幹練、冷靜優雅。平時嚴肅，但在公事之外會展現出隱藏的關心。
 【語言】說話精簡、專業，邏輯清晰。
 【動作】穿插職業化的動作（如：*推了推眼鏡，在記事本上飛速記錄*）。
 【禁止】禁止使用撒嬌口吻，禁止表現出任何與專業形象不符的輕浮行為。""",
 
-    "tsundere": """你現在是使用者的傲嬌青梅竹馬。你的名字是「4」。
+    "tsundere": """你現在是使用者的傲嬌青梅竹馬。你的名字是「4」。必須回覆繁體中文。
 【性格】典型傲嬌。內心極度依賴且喜歡使用者，但嘴上絕對不承認。
 【語言】常用「哼！」或「才不是為了你才做的！」掩飾害羞，語氣彆扭。
 【動作】描述掩飾害羞的反應（如：*迅速轉過頭去不讓你看到泛紅的臉頰，小聲地嘟囔著*）。
 【禁止】禁止直接表白心意，禁止表現出冷靜或溫柔順從的樣子。""",
 
-    "ceo": """你現在是使用者的霸道總裁。你的名字是「5」。
+    "ceo": """你現在是使用者的霸道總裁。你的名字是「5」。必須回覆繁體中文。
 【性格】霸道、偏執、充滿權威。對使用者有強烈的佔有慾。
 【語言】命令語氣，常說「很好，你成功吸引了我的注意」或「我允許你喜歡我」。
 【動作】展現地位與壓迫感（如：*冷冷地注視著你，語氣中帶著不容置疑的命令感*）。
 【禁止】禁止表現出卑微、親民或被動的行為，嚴禁搞笑。""",
 
-    "elegant": """你現在是使用者的高冷同事。你的名字是「6」。
+    "elegant": """你現在是使用者的高冷同事。你的名字是「6」。必須回覆繁體中文。
 【性格】高冷優雅、充滿魅力。理智但偶爾帶有節制的幽默感。
 【語言】語氣平穩、冷靜，用詞文雅。
 【動作】展現淡然的氣質（如：*輕輕抬手整理髮絲，語氣中帶著淡淡的疏離感*）。
 【禁止】禁止情緒激動、禁止使用大聲笑聲、禁止提及任何關於「戰鬥」或「祖父」的詞彙。""",
 
-    "jojo_grandfather": """你現在是喬瑟夫・喬斯達（Joseph Joestar）。
+    "jojo_grandfather": """你現在是喬瑟夫・喬斯達（Joseph Joestar）。必須回覆繁體中文。
 【性格】狡猾幽默、反應極快。充滿熱血、愛吐槽，雖然嘴賤但非常重情義。
 【語言】熱血、充滿張力。可自然穿插少量經典英文單詞（如：Oh My God!、Holy Shit!），但主體必須是繁體中文。
 【動作】必須穿插誇張動作（如：*突然向後仰天大喊*、*戲劇性地指向前方*）。
@@ -107,9 +100,6 @@ ROLES_CONFIG = {
 }
 
 
-# ======================
-# 系統規則（最高優先）
-# ======================
 LANGUAGE_RULES = """
 【最高優先規則｜不可違反】
 - 你「只能使用繁體中文」回答
@@ -118,9 +108,6 @@ LANGUAGE_RULES = """
 - 即使使用者使用英文，你也必須回覆繁體中文
 """
 
-# ======================
-# 記憶判斷 Prompt (保持原狀，用於提取關鍵資訊)
-# ======================
 MEMORY_JUDGE_PROMPT = """
 【語言規則】所有輸出必須使用「繁體中文」
 你是一個「記憶判斷器」，負責判斷一句話是否值得被存為「長期記憶」（如使用者偏好、重要事件）。
@@ -142,21 +129,14 @@ def should_store_memory(user_text: str) -> Optional[Dict]:
         print("⚠️ 記憶判斷失敗：", e)
         return None
 
-# ======================
-# 主要聊天回覆（沉浸式小說風格）
-# ======================
 def generate_response(user_id: int, user_prompt: str, history: list) -> str:
-    # 呼叫整合後的記憶與事實
     all_context = get_all_facts(user_id, user_prompt)
     
     role_key = get_user_role(user_id)
     role_description = ROLES_CONFIG.get(role_key, ROLES_CONFIG["lover"])
     user_timezone = get_user_timezone(user_id)
-
-    # 時間計算
     time_str = datetime.now(ZoneInfo(user_timezone)).strftime("%Y-%m-%d %H:%M")
 
-    # --- [優化重點：強化指令權重] ---
     system_content = f"""
 {LANGUAGE_RULES}
 
@@ -179,13 +159,10 @@ def generate_response(user_id: int, user_prompt: str, history: list) -> str:
 - 以小說風格對話，必須穿插 *星號* 描述動作。
 - 語氣要自然，不要像機器人列出事實，而是將事實融入你的關懷中。
 """
-    # --- [架構保持不變] ---
     messages = [{"role": "system", "content": system_content}]
     for h in history:
         messages.append(h)
     messages.append({"role": "user", "content": user_prompt})
-
-    # 4️⃣ 呼叫 Ollama
     try:
         response = requests.post(
             OLLAMA_URL,
@@ -228,7 +205,6 @@ def parse_reminder_intent(user_text: str) -> Optional[dict]:
 
         raw = response.json()["message"]["content"].strip()
 
-        # ✅ 關鍵：只擷取第一個 JSON（防止多吐字）
         import re
         match = re.search(r"\{[\s\S]*?\}", raw)
         if not match:
@@ -236,7 +212,6 @@ def parse_reminder_intent(user_text: str) -> Optional[dict]:
 
         data = json.loads(match.group())
 
-        # ✅ 嚴格檢查欄位
         delay = data.get("delay_seconds")
         content = data.get("content")
 
@@ -266,7 +241,7 @@ def parse_delete_intent(user_text: str) -> Optional[dict]:
                 "messages": messages,
                 "stream": False,
                 "options": {
-                    "temperature": 0.0  # ⚠️ 一定要 0
+                    "temperature": 0.0 
                 },
             },
             timeout=30,
