@@ -346,3 +346,29 @@ def get_all_facts(user_id: int, query_text: str = None):
 
     fact_str = "\n".join(facts)
     return f"【已知事實】\n{fact_str}\n\n【相關回憶】\n{semantic_mems}"
+
+def delete_reminder_by_index(user_id: int, index: int) -> bool:
+    """
+    依照使用者目前行程排序後的「第 index 筆」刪除
+    index 從 1 開始
+    """
+    import sqlite3
+    from .memory_manager import DB_PATH  # 如果同檔案，可刪這行
+
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute("""
+            SELECT id
+            FROM reminders
+            WHERE user_id = ?
+            ORDER BY remind_at
+        """, (user_id,)).fetchall()
+
+        if index < 1 or index > len(rows):
+            return False
+
+        reminder_id = rows[index - 1][0]
+        conn.execute(
+            "DELETE FROM reminders WHERE id = ?",
+            (reminder_id,)
+        )
+        return True

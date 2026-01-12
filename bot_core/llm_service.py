@@ -18,6 +18,45 @@ from .memory_manager import (
 # ======================
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3.1"
+# ======================
+# 提醒意圖解析 Prompt   
+REMINDER_INTENT_PROMPT = """
+你是一個「提醒意圖解析器」。
+
+請判斷使用者這句話「是否在請你之後提醒他」。
+
+【規則】
+- 只輸出 JSON
+- 禁止聊天、禁止解釋
+- 時間請轉成「秒」
+- 如果沒有明確時間，但有「等等 / 待會 / 等一下」，請用 300 秒
+- 如果完全沒有時間概念，請回傳 null
+
+【輸出格式】
+{
+  "is_reminder": true / false,
+  "delay_seconds": number | null,
+  "content": "提醒的事情（簡短）"
+}
+"""
+DELETE_REMINDER_PROMPT = """
+你是一個「行程刪除意圖解析器」。
+
+請判斷使用者這句話是否在「要求刪除某個已存在的提醒」。
+
+【規則】
+- 只輸出 JSON
+- 禁止聊天、禁止解釋
+- 不要編造不存在的行程
+- 如果只是聊天或詢問，請回傳 is_delete = false
+
+【輸出格式】
+{
+  "is_delete": true / false,
+  "time_hint": "時間線索（例如：今天下午 / 明天早上 / null）",
+  "content_hint": "事件關鍵字（例如：喝水 / 運動 / null）"
+}
+"""
 
 # ======================
 # 角色人格定義（升級為小說敘事風格）
@@ -35,6 +74,7 @@ ROLES_CONFIG = {
 你精明幹練、冷靜優雅，雖然平時嚴肅，但偶爾會展現出對老闆的關心。
 請務必穿插職業化的動作描述（如：*推了推眼鏡，在記事本上飛速記錄*）。"""
 }
+
 
 # ======================
 # 系統規則（最高優先）
@@ -135,3 +175,68 @@ def generate_response(user_id: int, user_prompt: str, history: list) -> str:
     except Exception as e:
         print(f"❌ 生成回覆出錯：{e}")
         return "❤️（*有些不安地攪動手指* 我剛才好像走神了...你能再說一遍嗎？）"
+
+def parse_reminder_intent(user_text: str) -> Optional[dict]:
+    messages = [
+        {"role": "system", "content": REMINDER_INTENT_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.0  # ⚠️ 一定要 0，避免亂編
+                },
+            },
+            timeout=30,
+        )
+        content = response.json()["message"]["content"].strip()
+        result = json.loads(content)
+
+        if not isinstance(result, dict):
+            return None
+        if not result.get("is_reminder"):
+            return None
+
+        return result
+
+    except Exception as e:
+        print("⚠️ 提醒意圖解析失敗：", e)
+        return None
+def parse_delete_intent(user_text: str) -> Optional[dict]:
+    messages = [
+        {"role": "system", "content": DELETE_REMINDER_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.0  # ⚠️ 一定要 0
+                },
+            },
+            timeout=30,
+        )
+        content = response.json()["message"]["content"].strip()
+        result = json.loads(content)
+
+        if not isinstance(result, dict):
+            return None
+        if not result.get("is_delete"):
+            return None
+
+        return result
+
+    except Exception as e:
+        print("⚠️ 刪除意圖解析失敗：", e)
+        return None

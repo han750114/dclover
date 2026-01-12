@@ -8,6 +8,10 @@ from discord import app_commands
 from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from bot_core.llm_service import parse_reminder_intent
+from bot_core.llm_service import parse_delete_intent
+from bot_core.memory_manager import get_reminders, delete_reminder_by_index
+
 
 from bot_core.schedule_renderer import render_schedule
 from bot_core.llm_service import generate_response, should_store_memory
@@ -214,6 +218,16 @@ async def week(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
+
+async def short_timer(bot, delay: int, content: str, user_id: int):
+    await asyncio.sleep(delay)
+    try:
+        user = await bot.fetch_user(user_id)
+        await user.send(f"（*輕輕拍了拍你的肩膀*）提醒主人：{content}")
+    except Exception as e:
+        print("短提醒執行失敗:", e)
+
 # ======================
 # 時間解析（只負責算，不聊天）
 # ======================
@@ -271,24 +285,90 @@ async def on_message(message):
     # 取得使用者時區
     tz = get_user_timezone(user_id) or "Asia/Taipei"
 
-    # --- [1. 短時間計時提醒]：直接執行 asyncio.create_task ---
-    short_matches = re.findall(r"(\d+)\s*(秒|分鐘)\s*後?\s*提醒(?:我)?([^，。\n]*)", user_text)
+    # --- [1. 短時間計時提醒] ---
+    short_matches = re.findall(
+        r"(\d+)\s*(秒|分鐘)\s*後?\s*提醒(?:我)?([^，。\n]*)",
+        user_text
+    )
+
     if short_matches:
+        confirmations = []
+
         for amount, unit, text in short_matches:
             delay = int(amount) if unit == "秒" else int(amount) * 60
             task_content = text.strip() or "該注意時間囉"
 
-            async def short_timer(d, t, uid):
-                await asyncio.sleep(d)
-                try:
-                    user = await bot.fetch_user(uid)
-                    await user.send(f"（*輕輕拍了拍你的肩膀*）提醒主人：{t}")
-                except Exception as e:
-                    print("短提醒執行失敗:", e)
-            
-            asyncio.create_task(short_timer(delay, task_content, user_id))
-        # 提示 LLM 動作已成功執行
-        user_text += f"\n(系統提示：你已成功幫主人設定了這幾個計時器，請在回覆中用小說語氣溫柔地確認這件事)"
+            asyncio.create_task(
+                short_timer(bot, delay, task_content, user_id)
+            )
+
+            confirmations.append(f"{amount}{unit}後：{task_content}")
+
+        # 給 LLM 的「系統事實提示（只加一次）」
+        confirm_text = "、".join(confirmations)
+        user_text += (
+            f"\n(系統提示：你已成功幫主人設定以下計時提醒：{confirm_text}，"
+            f"請在回覆中用小說語氣溫柔地確認這件事)"
+        )
+
+    # --- [Agent：自然語言刪除行程] ---
+    delete_intent = parse_delete_intent(original_text)
+
+    if delete_intent:
+        time_hint = delete_intent.get("time_hint")
+        content_hint = delete_intent.get("content_hint")
+
+        reminders = get_reminders(user_id)
+
+        # 嘗試比對最可能的一筆
+        candidates = []
+
+        for idx, (remind_at, content) in enumerate(reminders, start=1):
+            score = 0
+            if content_hint and content_hint in content:
+                score += 2
+            if time_hint and time_hint in remind_at:
+                score += 1
+
+            if score > 0:
+                candidates.append((score, idx, remind_at, content))
+
+        if not candidates:
+            await message.channel.send(
+                f"{message.author.mention} ⚠️ 我找不到符合描述的行程，可以再說清楚一點嗎？"
+            )
+            return
+
+        # 選分數最高的一筆
+        candidates.sort(reverse=True)
+        _, index, remind_at, content = candidates[0]
+
+        delete_reminder_by_index(user_id, index)
+
+        await message.channel.send(
+            f"{message.author.mention} 🗑️ 已幫你刪除這個行程：\n"
+            f"🕒 {remind_at.replace('T',' ')[:16]}｜{content}"
+        )
+        return
+
+
+    # --- [Agent：語意型短時間提醒] ---
+    intent = parse_reminder_intent(original_text)
+
+    if intent:
+        delay = intent.get("delay_seconds")
+        content = intent.get("content") or "該注意時間囉"
+
+        if delay:
+            asyncio.create_task(
+                short_timer(bot, delay, content, user_id)
+            )
+
+            # 告知 LLM「事實已發生」（但不 return）
+            user_text += (
+                f"\n(系統提示：你已幫主人設定一個約 {delay} 秒後的提醒，"
+                f"內容是「{content}」，請溫柔地確認這件事)"
+            )
 
     # --- [2. 日期排程提醒]：存入 SQLite ---
     parsed = parse_datetime(original_text, tz)
