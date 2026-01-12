@@ -38,7 +38,7 @@ pip install discord.py python-dotenv requests chromadb tzdata
 ```bash
 
 # 下載主要的聊天模型
-ollama pull llama3.1
+ollama pull llama3.2
 
 # 下載語義向量模型 (實現 RAG 記憶功能)
 ollama pull bge-m3

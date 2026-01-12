@@ -169,6 +169,10 @@ async def reminder_watcher():
     app_commands.Choice(name="溫柔戀人", value="lover"),
     app_commands.Choice(name="活潑女僕", value="maid"),
     app_commands.Choice(name="專業女秘書", value="secretary"),
+    app_commands.Choice(name="傲嬌青梅竹馬", value="tsundere"),
+    app_commands.Choice(name="霸道總裁", value="ceo"),
+    app_commands.Choice(name="高冷同事", value="elegant"),
+    app_commands.Choice(name="JoJo 總裁", value="jojo_grandfather"),
 ])
 async def role(interaction: discord.Interaction, 人格: app_commands.Choice[str]):
     set_user_role(interaction.user.id, 人格.value)
