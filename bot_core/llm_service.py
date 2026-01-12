@@ -17,7 +17,7 @@ from .memory_manager import (
 # Ollama 設定
 # ======================
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "llama3.1"
+MODEL_NAME = "llama3.2"
 # ======================
 # 提醒意圖解析 Prompt   
 REMINDER_INTENT_PROMPT = """
