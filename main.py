@@ -1,4 +1,4 @@
-from email.mime import message
+# from email.mime import message
 import os
 import re
 import asyncio
@@ -33,6 +33,9 @@ from bot_core.memory_manager import (
     get_week_reminders,
     get_all_anniversaries,
 )
+short_reminder_tasks = {}  
+# 格式：
+# { user_id: [ { "content": str, "task": asyncio.Task } ] }
 
 # ======================
 # 環境設定
@@ -286,41 +289,61 @@ async def on_message(message):
     tz = get_user_timezone(user_id) or "Asia/Taipei"
 
     # --- [1. 短時間計時提醒] ---
-    short_matches = re.findall(
-        r"(\d+)\s*(秒|分鐘)\s*後?\s*提醒(?:我)?([^，。\n]*)",
-        user_text
-    )
+    # short_matches = re.findall(
+    #     r"(\d+)\s*(秒|分鐘)\s*後?\s*提醒(?:我)?([^，。\n]*)",
+    #     user_text
+    # )
 
-    if short_matches:
-        confirmations = []
+    # if short_matches:
+    #     confirmations = []
 
-        for amount, unit, text in short_matches:
-            delay = int(amount) if unit == "秒" else int(amount) * 60
-            task_content = text.strip() or "該注意時間囉"
+    #     for amount, unit, text in short_matches:
+    #         delay = int(amount) if unit == "秒" else int(amount) * 60
+    #         task_content = text.strip() or "該注意時間囉"
 
-            asyncio.create_task(
-                short_timer(bot, delay, task_content, user_id)
-            )
+    #         task = asyncio.create_task(
+    #             short_timer(bot, delay, task_content, user_id)
+    #         )
 
-            confirmations.append(f"{amount}{unit}後：{task_content}")
+    #         short_reminder_tasks.setdefault(user_id, []).append({
+    #             "content": task_content,
+    #             "task": task
+    #         })
 
-        # 給 LLM 的「系統事實提示（只加一次）」
-        confirm_text = "、".join(confirmations)
-        user_text += (
-            f"\n(系統提示：你已成功幫主人設定以下計時提醒：{confirm_text}，"
-            f"請在回覆中用小說語氣溫柔地確認這件事)"
-        )
 
-    # --- [Agent：自然語言刪除行程] ---
+        #     confirmations.append(f"{amount}{unit}後：{task_content}")
+
+        # # 給 LLM 的「系統事實提示（只加一次）」
+        # confirm_text = "、".join(confirmations)
+        # user_text += (
+        #     f"\n(系統提示：你已成功幫主人設定以下計時提醒：{confirm_text}，"
+        #     f"請在回覆中用小說語氣溫柔地確認這件事)"
+        # )
+    # --- [Agent：自然語言刪除提醒（短提醒 + 排程）] ---
     delete_intent = parse_delete_intent(original_text)
 
     if delete_intent:
         time_hint = delete_intent.get("time_hint")
         content_hint = delete_intent.get("content_hint")
 
-        reminders = get_reminders(user_id)
+        # 1️⃣ 先嘗試刪除「短時間提醒」
+        tasks = short_reminder_tasks.get(user_id, [])
+        for t in list(tasks):  # ⚠️ 一定要 list()，避免邊迭代邊刪
+            if content_hint and content_hint in t["content"]:
+                t["task"].cancel()
+                tasks.remove(t)
 
-        # 嘗試比對最可能的一筆
+                if not tasks:
+                    short_reminder_tasks.pop(user_id, None)
+
+                await message.channel.send(
+                    f"{message.author.mention} 🗑️ 已幫你取消短時間提醒：{t['content']}"
+                )
+                return
+            
+
+        # 2️⃣ 再嘗試刪除「資料庫排程提醒」
+        reminders = get_reminders(user_id)
         candidates = []
 
         for idx, (remind_at, content) in enumerate(reminders, start=1):
@@ -329,17 +352,15 @@ async def on_message(message):
                 score += 2
             if time_hint and time_hint in remind_at:
                 score += 1
-
             if score > 0:
                 candidates.append((score, idx, remind_at, content))
 
         if not candidates:
             await message.channel.send(
-                f"{message.author.mention} ⚠️ 我找不到符合描述的行程，可以再說清楚一點嗎？"
+                f"{message.author.mention} ⚠️ 我找不到符合描述的提醒，可以再說清楚一點嗎？"
             )
             return
 
-        # 選分數最高的一筆
         candidates.sort(reverse=True)
         _, index, remind_at, content = candidates[0]
 
@@ -352,6 +373,7 @@ async def on_message(message):
         return
 
 
+
     # --- [Agent：語意型短時間提醒] ---
     intent = parse_reminder_intent(original_text)
 
@@ -360,9 +382,14 @@ async def on_message(message):
         content = intent.get("content") or "該注意時間囉"
 
         if delay:
-            asyncio.create_task(
+            task = asyncio.create_task(
                 short_timer(bot, delay, content, user_id)
             )
+
+            short_reminder_tasks.setdefault(user_id, []).append({
+                "content": content,
+                "task": task
+            })
 
             # 告知 LLM「事實已發生」（但不 return）
             user_text += (
