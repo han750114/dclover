@@ -21,24 +21,24 @@ MODEL_NAME = "llama3.1"
 # ======================
 # 提醒意圖解析 Prompt   
 REMINDER_INTENT_PROMPT = """
-你是一個「提醒意圖解析器」。
+你是一個提醒意圖解析器。
 
-請判斷使用者這句話「是否在請你之後提醒他」。
+請判斷這一句話是否包含「短時間提醒」。
 
 【規則】
 - 只輸出 JSON
-- 禁止聊天、禁止解釋
-- 時間請轉成「秒」
-- 如果沒有明確時間，但有「等等 / 待會 / 等一下」，請用 300 秒
-- 如果完全沒有時間概念，請回傳 null
+- 禁止聊天
+- 時間轉成秒
+- 若不是提醒，回傳 null
+- 不要回傳"提醒事項"和"時間"等字眼
 
 【輸出格式】
 {
-  "is_reminder": true / false,
   "delay_seconds": number | null,
-  "content": "提醒的事情（簡短）"
+  "content": "提醒內容" | null
 }
 """
+
 DELETE_REMINDER_PROMPT = """
 你是一個「行程刪除意圖解析器」。
 
@@ -189,25 +189,37 @@ def parse_reminder_intent(user_text: str) -> Optional[dict]:
                 "model": MODEL_NAME,
                 "messages": messages,
                 "stream": False,
-                "options": {
-                    "temperature": 0.0  # ⚠️ 一定要 0，避免亂編
-                },
+                "options": {"temperature": 0.0},
             },
             timeout=30,
         )
-        content = response.json()["message"]["content"].strip()
-        result = json.loads(content)
 
-        if not isinstance(result, dict):
-            return None
-        if not result.get("is_reminder"):
+        raw = response.json()["message"]["content"].strip()
+
+        # ✅ 關鍵：只擷取第一個 JSON（防止多吐字）
+        import re
+        match = re.search(r"\{[\s\S]*?\}", raw)
+        if not match:
             return None
 
-        return result
+        data = json.loads(match.group())
+
+        # ✅ 嚴格檢查欄位
+        delay = data.get("delay_seconds")
+        content = data.get("content")
+
+        if not delay or not isinstance(delay, (int, float)):
+            return None
+
+        return {
+            "delay_seconds": int(delay),
+            "content": content or "該注意時間囉"
+        }
 
     except Exception as e:
         print("⚠️ 提醒意圖解析失敗：", e)
         return None
+
 def parse_delete_intent(user_text: str) -> Optional[dict]:
     messages = [
         {"role": "system", "content": DELETE_REMINDER_PROMPT},

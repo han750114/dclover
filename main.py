@@ -52,6 +52,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="%", intents=intents)
 
+def split_into_clauses(text: str):
+    return [
+        t.strip()
+        for t in re.split(r"[，,、]", text)
+        if t.strip()
+    ]
+
 # ======================
 # 啟動事件
 # ======================
@@ -228,6 +235,9 @@ async def short_timer(bot, delay: int, content: str, user_id: int):
     try:
         user = await bot.fetch_user(user_id)
         await user.send(f"（*輕輕拍了拍你的肩膀*）提醒主人：{content}")
+    except asyncio.CancelledError:
+        # 正常取消，不當錯誤
+        pass
     except Exception as e:
         print("短提醒執行失敗:", e)
 
@@ -321,7 +331,6 @@ async def on_message(message):
         # )
     # --- [Agent：自然語言刪除提醒（短提醒 + 排程）] ---
     delete_intent = parse_delete_intent(original_text)
-
     if delete_intent:
         time_hint = delete_intent.get("time_hint")
         content_hint = delete_intent.get("content_hint")
@@ -371,31 +380,62 @@ async def on_message(message):
             f"🕒 {remind_at.replace('T',' ')[:16]}｜{content}"
         )
         return
+    clauses = split_into_clauses(original_text)
+    confirmations = []
+
+    for clause in clauses:
+        intent = parse_reminder_intent(clause)
+        if not intent:
+            continue
+
+        delay = intent["delay_seconds"]
+        content = intent["content"]
+
+        task = asyncio.create_task(
+            short_timer(bot, delay, content, user_id)
+        )
+
+        short_reminder_tasks.setdefault(user_id, []).append({
+            "content": content,
+            "task": task
+        })
+
+        confirmations.append(f"{delay} 秒後：{content}")
+
+    if confirmations:
+        user_text += (
+            f"\n(系統提示：你已幫主人設定以下提醒："
+            f"{'、'.join(confirmations)}，"
+            f"請用溫柔小說語氣確認)"
+        )
+
+
+    
 
 
 
     # --- [Agent：語意型短時間提醒] ---
-    intent = parse_reminder_intent(original_text)
+    # intent = parse_reminder_intent(original_text)
 
-    if intent:
-        delay = intent.get("delay_seconds")
-        content = intent.get("content") or "該注意時間囉"
+    # if intent:
+    #     delay = intent.get("delay_seconds")
+    #     content = intent.get("content") or "該注意時間囉"
 
-        if delay:
-            task = asyncio.create_task(
-                short_timer(bot, delay, content, user_id)
-            )
+    #     if delay:
+    #         task = asyncio.create_task(
+    #             short_timer(bot, delay, content, user_id)
+    #         )
 
-            short_reminder_tasks.setdefault(user_id, []).append({
-                "content": content,
-                "task": task
-            })
+    #         short_reminder_tasks.setdefault(user_id, []).append({
+    #             "content": content,
+    #             "task": task
+    #         })
 
-            # 告知 LLM「事實已發生」（但不 return）
-            user_text += (
-                f"\n(系統提示：你已幫主人設定一個約 {delay} 秒後的提醒，"
-                f"內容是「{content}」，請溫柔地確認這件事)"
-            )
+    #         user_text += (
+    #             f"\n(系統提示：你已幫主人設定一個約 {delay} 秒後的提醒，"
+    #             f"內容是「{content}」，請溫柔地確認這件事)"
+    #         )
+
 
     # --- [2. 日期排程提醒]：存入 SQLite ---
     parsed = parse_datetime(original_text, tz)
