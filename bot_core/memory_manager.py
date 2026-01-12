@@ -63,7 +63,7 @@ def init_db():
         """)
 
         # ======================
-        # 🎂 紀念日 / 生日表
+        # 紀念日 / 生日表
         # ======================
         conn.execute("""
         CREATE TABLE IF NOT EXISTS anniversaries (
@@ -190,7 +190,7 @@ def get_memories(user_id: int, limit: int = 5) -> str:
     return "\n".join(f"- ({c}) {t}" for c, t in rows)
 
 # ======================
-# ⏰ 排程提醒（UTC）
+# 排程提醒（UTC）
 # ======================
 def save_reminder(user_id: int, remind_at: str, content: str):
     with sqlite3.connect(DB_PATH) as conn:
@@ -220,7 +220,7 @@ def pop_due_reminders(now_iso: str):
         return rows
 
 # ======================
-# 📆 今日 / 本週行程
+# 今日 / 本週行程
 # ======================
 def get_today_reminders(user_id: int):
     today = date.today().isoformat()

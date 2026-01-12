@@ -62,13 +62,13 @@ async def on_ready():
         morning_summary_watcher.start()
     try:
         synced = await bot.tree.sync()
-        print(f"✅ 已同步 {len(synced)} 個斜線指令")
+        print(f"已同步 {len(synced)} 個斜線指令")
     except Exception as e:
         print("Slash sync failed:", e)
-    print(f"❤️ 戀人機器人已上線：{bot.user}")
+    print(f"戀人機器人已上線：{bot.user}")
 
 # ======================
-# ⏰ 排程監看器（唯一真正提醒來源）
+# 排程監看器（唯一真正提醒來源）
 # ======================
 @tasks.loop(minutes=10)
 async def anniversary_watcher():
@@ -94,9 +94,9 @@ async def anniversary_watcher():
                 try:
                     user = await bot.fetch_user(user_id)
                     if type_ == "birthday":
-                        await user.send(f"🎂 今天是你的生日！生日快樂！🎉")
+                        await user.send(f"今天是你的生日！生日快樂！🎉")
                     else:
-                        await user.send(f"💝 今天是你的 {label}，別忘了慶祝喔！")
+                        await user.send(f"今天是你的 {label}，別忘了慶祝喔！")
                 except Exception as e:
                     print("紀念日提醒失敗:", e)
 
@@ -126,7 +126,7 @@ async def morning_summary_watcher():
             embed = render_schedule_embed(
                 reminders,
                 role,
-                title="🌅 早安！今天的行程提醒"
+                title="早安！今天的行程提醒"
             )
 
             try:
@@ -142,12 +142,12 @@ async def reminder_watcher():
     for _, user_id, remind_at, content in rows:
         try:
             user = await bot.fetch_user(user_id)
-            await user.send(f"⏰ 提醒你：{content}")
+            await user.send(f"提醒你：{content}")
         except Exception as e:
             print("提醒失敗:", e)
 
 # ======================
-# 🎭 角色切換
+# 角色切換
 # ======================
 @bot.tree.command(name="role", description="切換 AI 伴侶的人格設定")
 @app_commands.choices(人格=[
@@ -163,7 +163,7 @@ async def role(interaction: discord.Interaction, 人格: app_commands.Choice[str
     )
 
 # ======================
-# 🚻 性別設定
+# 性別設定
 # ======================
 @bot.tree.command(name="gender", description="設定您的性別")
 @app_commands.choices(性別=[
@@ -178,7 +178,7 @@ async def gender(interaction: discord.Interaction, 性別: app_commands.Choice[s
     )
 
 # ======================
-# 🌏 時區設定
+# 時區設定
 # ======================
 @bot.tree.command(name="timezone", description="設定您的時區（如 Asia/Taipei）")
 async def timezone(interaction: discord.Interaction, 時區: str):
@@ -188,7 +188,7 @@ async def timezone(interaction: discord.Interaction, 時區: str):
         ephemeral=True
     )
 # ======================
-# 📆 Slash：今日行程
+# Slash：今日行程
 # ======================
 @bot.tree.command(name="today", description="查看今日行程")
 async def today(interaction: discord.Interaction):
@@ -202,7 +202,7 @@ async def today(interaction: discord.Interaction):
 
 
 # ======================
-# ⏳ Slash：本週行程
+# Slash：本週行程
 # ======================
 @bot.tree.command(name="week", description="查看本週行程")
 async def week(interaction: discord.Interaction):
@@ -215,7 +215,7 @@ async def week(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ======================
-# 🧠 時間解析（只負責算，不聊天）
+# 時間解析（只負責算，不聊天）
 # ======================
 def parse_datetime(text: str, tz: str):
     try:

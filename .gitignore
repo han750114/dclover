@@ -7,5 +7,5 @@ venv/
 .pytest_cache/
 
 # 忽略資料庫和 Log
-data/*.db
+data/
 *.log
