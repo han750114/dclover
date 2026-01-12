@@ -1,11 +1,9 @@
 .env
 
-# 忽略 Python 相關檔案/資料夾
 __pycache__/
 *.pyc
 venv/
 .pytest_cache/
 
-# 忽略資料庫和 Log
 data/
 *.log

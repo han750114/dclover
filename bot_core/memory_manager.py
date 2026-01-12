@@ -293,12 +293,15 @@ def get_all_users():
         SELECT user_id, timezone FROM user_settings
         """).fetchall()
 def get_all_facts(user_id: int, query_text: str = None):
-    """
-    整合 SQLite 事實與 ChromaDB 語義記憶
-    """
     facts = []
-    
     with sqlite3.connect(DB_PATH) as conn:
+        # 【新增】讓 LLM 看見目前的排程清單，防止它亂編日期
+        reminders = conn.execute(
+            "SELECT remind_at, content FROM reminders WHERE user_id = ? AND remind_at >= ? ORDER BY remind_at LIMIT 5",
+            (user_id, datetime.utcnow().isoformat())
+        ).fetchall()
+        for r in reminders:
+            facts.append(f"系統已排定行程：{r[0].replace('T', ' ')} - {r[1]}")
         # 1. 抓取紀念日/生日
         annivs = conn.execute(
             "SELECT label, month, day FROM anniversaries WHERE user_id = ?",
@@ -307,7 +310,18 @@ def get_all_facts(user_id: int, query_text: str = None):
         for a in annivs:
             facts.append(f"重要日子 - {a[0]}：{a[1]}月{a[2]}日")
         
-        # 2. 抓取性別與時區
+        # 2. [新增] 抓取目前的排程提醒
+        # 只抓取未來的行程，最多 5 筆
+        reminders = conn.execute(
+            "SELECT remind_at, content FROM reminders WHERE user_id = ? AND remind_at >= ? ORDER BY remind_at LIMIT 5",
+            (user_id, datetime.utcnow().isoformat())
+        ).fetchall()
+        for r in reminders:
+            # 格式化一下時間，讓 LLM 更好讀
+            time_str = r[0].replace("T", " ")[:16]
+            facts.append(f"已排定行程：{time_str} - {r[1]}")
+
+        # 3. 抓取性別與時區
         settings = conn.execute(
             "SELECT user_gender, timezone FROM user_settings WHERE user_id = ?",
             (user_id,)
