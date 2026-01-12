@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
+from datetime import timedelta
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from bot_core.llm_service import parse_reminder_intent
@@ -245,12 +246,113 @@ async def short_timer(bot, delay: int, content: str, user_id: int):
 # 時間解析（只負責算，不聊天）
 # ======================
 def parse_datetime(text: str, tz: str):
+    WEEKDAY_MAP = {
+    "一": 0,
+    "二": 1,
+    "三": 2,
+    "四": 3,
+    "五": 4,
+    "六": 5,
+    "日": 6,
+    "天": 6,
+    }
+
     try:
         zone = ZoneInfo(tz)
     except ZoneInfoNotFoundError:
         zone = ZoneInfo("Asia/Taipei")
 
     now = datetime.now(zone)
+
+    weekday_match = re.search(r"(禮拜|星期)([一二三四五六日天5])", text)
+    # 先抓「6點」這種（最準）
+    time_match = re.search(
+        r"(下午|晚上|上午|早上)?\s*(\d{1,2})\s*點",
+        text
+    )
+
+    # 如果沒寫「點」，再退而求其次
+    if not time_match:
+        time_match = re.search(
+            r"(下午|晚上|上午|早上)\s*(\d{1,2})",
+            text
+        )
+
+    # ❶ 先判斷是否只有日期（沒有時間）
+    date_only = re.search(r"(\d{1,2})/(\d{1,2})", text)
+
+    if not time_match and date_only:
+        month, day = map(int, date_only.groups())
+
+        remind_at = datetime(
+            year=now.year,
+            month=month,
+            day=day,
+            hour=12,      # 預設中午 12 點
+            minute=0,
+            tzinfo=zone
+        )
+
+        if remind_at < now:
+            remind_at = remind_at.replace(year=now.year + 1)
+
+        content = re.sub(r"\d{1,2}/\d{1,2}", "", text).strip()
+        if not content:
+            content = "未命名行程"
+
+        return remind_at.astimezone(ZoneInfo("UTC")).isoformat(), content
+
+    # ❷ 真的什麼都沒有才放棄
+    if not time_match:
+        return None
+
+    period, hour = time_match.groups()
+    hour = int(hour)
+
+    if period in ("下午", "晚上") and hour < 12:
+        hour += 12
+    if period in ("早上", "上午") and hour == 12:
+        hour = 0
+
+
+    if weekday_match and time_match:
+        weekday_raw = weekday_match.group(2)
+        period, hour = time_match.groups()
+        hour = int(hour)
+
+        if period in ("下午", "晚上") and hour < 12:
+            hour += 12
+        if period in ("早上", "上午") and hour == 12:
+            hour = 0
+
+        # 支援「禮拜5」
+        if weekday_raw.isdigit():
+            target_weekday = int(weekday_raw) - 1
+        else:
+            target_weekday = WEEKDAY_MAP[weekday_raw]
+
+        today_weekday = now.weekday()
+        days_ahead = (target_weekday - today_weekday) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+
+        remind_at = now.replace(
+            hour=hour,
+            minute=0,
+            second=0,
+            microsecond=0
+        ) + timedelta(days=days_ahead)
+
+        content = re.sub(
+            r"(我)?(禮拜|星期)[一二三四五六日天\d]+.*?(點)",
+            "",
+            text
+        ).strip()
+        if not content:
+            content = "未命名行程"
+
+        return remind_at.astimezone(ZoneInfo("UTC")).isoformat(), content
+
 
     m = re.search(
         r"(\d{1,2})/(\d{1,2}).*?(上午|下午|晚上|凌晨)?\s*(\d{1,2})",
@@ -278,6 +380,27 @@ def parse_datetime(text: str, tz: str):
 
     if remind_at < now and (now - remind_at).days > 180:
         remind_at = remind_at.replace(year=now.year + 1)
+
+    # 只有日期，沒有時間 → 預設中午 12:00
+    date_only = re.search(r"(\d{1,2})/(\d{1,2})", text)
+    if date_only and not time_match:
+        month, day = map(int, date_only.groups())
+
+        remind_at = datetime(
+            year=now.year,
+            month=month,
+            day=day,
+            hour=12,
+            minute=0,
+            tzinfo=zone
+        )
+
+        if remind_at < now:
+            remind_at = remind_at.replace(year=now.year + 1)
+
+        content = re.sub(r"\d{1,2}/\d{1,2}", "", text).strip()
+        return remind_at.astimezone(ZoneInfo("UTC")).isoformat(), content
+
 
     content = re.sub(r"(記得)?提醒我", "", text).strip()
     return remind_at.astimezone(ZoneInfo("UTC")).isoformat(), content
@@ -331,7 +454,11 @@ async def on_message(message):
         # )
     # --- [Agent：自然語言刪除提醒（短提醒 + 排程）] ---
     delete_intent = parse_delete_intent(original_text)
-    if delete_intent:
+    is_delete = "刪除" in original_text
+    delete_intent = parse_delete_intent(original_text) if is_delete else None
+
+    if is_delete:
+        delete_intent = delete_intent or {}
         time_hint = delete_intent.get("time_hint")
         content_hint = delete_intent.get("content_hint")
 
@@ -357,12 +484,70 @@ async def on_message(message):
 
         for idx, (remind_at, content) in enumerate(reminders, start=1):
             score = 0
-            if content_hint and content_hint in content:
+            matched_by_time = False
+
+
+            # 解析 DB 時間（UTC → 使用者時區）
+            try:
+                dt_utc = datetime.fromisoformat(remind_at)
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=ZoneInfo("UTC"))
+                dt_local = dt_utc.astimezone(ZoneInfo(tz))
+            except Exception:
+                continue
+
+            # 🔹 1️⃣ 比對內容
+            if content_hint and content and content_hint in content:
                 score += 2
-            if time_hint and time_hint in remind_at:
-                score += 1
-            if score > 0:
+
+            # 🔹 2️⃣ 比對時間（±1 小時視為同一筆）
+            if time_hint:
+                # 嘗試從 time_hint 解析出時間
+                parsed = parse_datetime(time_hint, tz)
+                if parsed:
+                    target_iso, _ = parsed
+                    target_dt = datetime.fromisoformat(target_iso).astimezone(ZoneInfo(tz))
+
+                    if abs((dt_local - target_dt).total_seconds()) <= 3600:
+                        score += 1
+                else:
+                    # 🔹 fallback：只比日期
+                    date_hint = re.search(r"(\d{1,2})/(\d{1,2})", time_hint)
+                    if date_hint:
+                        m, d = map(int, date_hint.groups())
+                        if dt_local.month == m and dt_local.day == d:
+                            score += 1
+            # 🔹 🔥 NEW：如果 LLM 沒給 time_hint，直接從原句抓日期
+            if not time_hint:
+                # 🔹 🔥 NEW：從原句補抓「早上 / 下午 + 幾點」
+                time_match = re.search(
+                    r"(早上|上午|下午|晚上)?\s*(\d{1,2})\s*點",
+                    original_text
+                )
+
+                if time_match:
+                    period, h = time_match.groups()
+                    h = int(h)
+
+                    if period in ("下午", "晚上") and h < 12:
+                        h += 12
+                    if period in ("早上", "上午") and h == 12:
+                        h = 0
+
+                    # ±1 小時視為同一筆
+                    if abs(dt_local.hour - h) <= 1:
+                        score += 2
+                        matched_by_time = True
+                date_hint = re.search(r"(\d{1,2})/(\d{1,2})", original_text)
+                if date_hint:
+                    m, d = map(int, date_hint.groups())
+                    if dt_local.month == m and dt_local.day == d:
+                        score += 1
+
+            # ✅ 最終收斂條件：只要有任何一種方式命中，就可刪
+            if score > 0 or matched_by_time:
                 candidates.append((score, idx, remind_at, content))
+
 
         if not candidates:
             await message.channel.send(
@@ -437,12 +622,18 @@ async def on_message(message):
     #         )
 
 
-    # --- [2. 日期排程提醒]：存入 SQLite ---
+    # --- [2. 日期排程提醒]：存入 SQLite（一定要在 LLM 前）---
     parsed = parse_datetime(original_text, tz)
     if parsed:
         remind_at, content = parsed
         save_reminder(user_id, remind_at, content)
-        user_text += f"\n(系統提示：你已成功將「{content}」排程在 {remind_at}，請在回覆中溫柔提及)"
+
+        await message.channel.send(
+            f"{message.author.mention} ✅ 已幫你記下行程：\n"
+            f"🕒 {remind_at.replace('T',' ')[:16]}｜{content}"
+        )
+        return  # 🔥 關鍵：不要再進 LLM
+
 
     # --- [3. 生日/紀念日] ---
     anniv_match = re.search(r"(我的)?(生日|紀念日).*?(\d{1,2})/(\d{1,2})", original_text)
@@ -469,7 +660,14 @@ async def on_message(message):
         user_history[user_id] = []
 
     # 傳入經過系統提示修改過的 user_text，確保 LLM 的回答與實際動作一致
-    reply = generate_response(user_id, user_text, history=user_history[user_id])
+    loop = asyncio.get_running_loop()
+    reply = await loop.run_in_executor(
+        None,
+        generate_response,
+        user_id,
+        user_text,
+        user_history[user_id]
+    )
     
     user_history[user_id].append({"role": "user", "content": original_text}) # 歷史紀錄存原始文字
     user_history[user_id].append({"role": "assistant", "content": reply})
