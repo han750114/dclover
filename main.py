@@ -276,7 +276,7 @@ def parse_datetime(text: str, tz: str):
         tzinfo=zone
     )
 
-    if remind_at < now:
+    if remind_at < now and (now - remind_at).days > 180:
         remind_at = remind_at.replace(year=now.year + 1)
 
     content = re.sub(r"(記得)?提醒我", "", text).strip()
@@ -455,7 +455,8 @@ async def on_message(message):
     if any(k in original_text for k in ["排程", "行程", "有什麼行程"]):
         reminders = get_reminders(user_id)
         role = get_user_role(user_id)
-        reply = render_schedule(reminders, role)
+        tz = get_user_timezone(user_id) or "Asia/Taipei"
+        reply = render_schedule(reminders, role, tz)
         await message.channel.send(f"{message.author.mention} {reply}")
         return
 
